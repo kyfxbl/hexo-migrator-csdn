@@ -1,4 +1,5 @@
 var extend = hexo.extend;
+var log = hexo.log;
 var async = require("async");
 var _ = require("underscore");
 var request = require('./lib/anti-anti-crawler-request');
@@ -11,7 +12,12 @@ extend.migrator.register('csdn', function(args){
 
     var username = args._.shift();
     if (!username) {
-        console.log("\nUsage:hexo migrate csdn <username>\n\nMore info:https://github.com/kyfxbl/hexo-migrator-csdn/");
+        var help = [
+            'Usage: hexo migrate csdn <username>',
+            '',
+            'More info: https://github.com/kyfxbl/hexo-migrator-csdn/'
+        ];
+        console.log(help.join('\n'));
         return;
     }
 
@@ -27,25 +33,32 @@ extend.migrator.register('csdn', function(args){
         _fetchPostThenSave
     ];
 
+    log.i('Migrate from %s...', username);
+    var begin = new Date().getTime();
+
     async.series(steps, function(err){
 
+        var end = new Date().getTime();
+        var timeConsume = (end - begin) / 1000;
+        log.i("执行时间: " + timeConsume);
+
         if(err){
-            console.log(err);
+            log.e(err);
             return;
         }
 
-        console.log("导出完成，导出成功" + successCount + "篇，导出失败" + failureCount + "篇\n");
+        log.i("导出完成，导出成功" + successCount + "篇，导出失败" + failureCount + "篇");
         if(errorUrls.length !== 0){
-            console.log("建议手工处理:\n");
+            log.i("建议手工处理:");
         }
         _.each(errorUrls, function(url){
-            console.log(url + "\n");
+            log.i(url);
         });
     });
 
     function _fetchTotalPageCount(callback){
 
-        console.log("查询博客分页中...");
+        log.i("查询博客分页中...");
 
         var _url = 'http://blog.csdn.net/' + username;
 
@@ -70,7 +83,7 @@ extend.migrator.register('csdn', function(args){
 
     function _gatherPostIds(callback){
 
-        console.log("查询博客总数...");
+        log.i("查询博客总数...");
 
         async.times(pageCount, function(n, next){
 
@@ -105,7 +118,7 @@ extend.migrator.register('csdn', function(args){
         async.eachLimit(postIds, 1, function(postId, next){
 
             var detailUrl = "http://blog.csdn.net/" + username + "/article/details/" + postId;
-            console.log("dealing with: " + detailUrl);
+            log.i("dealing with: " + detailUrl);
 
             request.get(detailUrl, function(err, response){
 
