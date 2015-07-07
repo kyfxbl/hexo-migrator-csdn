@@ -34,9 +34,12 @@ extend.migrator.register('csdn', function(args){
             return;
         }
 
-        console.log("导出完成，导出成功" + successCount + "篇，导出失败" + failureCount + "篇，建议手工处理\n");
+        console.log("导出完成，导出成功" + successCount + "篇，导出失败" + failureCount + "篇\n");
+        if(errorUrls.length !== 0){
+            console.log("建议手工处理:\n");
+        }
         _.each(errorUrls, function(url){
-            console.log("导出失败: " + url + "\n");
+            console.log(url + "\n");
         });
     });
 
@@ -98,7 +101,8 @@ extend.migrator.register('csdn', function(args){
 
     function _fetchPostThenSave(callback){
 
-        async.eachLimit(postIds, 5, function(postId, next){
+        // 并发http请求，似乎会引起csdn延迟响应
+        async.eachLimit(postIds, 1, function(postId, next){
 
             var detailUrl = "http://blog.csdn.net/" + username + "/article/details/" + postId;
             console.log("dealing with: " + detailUrl);
