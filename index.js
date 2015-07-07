@@ -17,7 +17,6 @@ extend.migrator.register('csdn', function(args){
 
     var pageCount = 0;
     var postIds = [];
-    var postMetadatas = [];
     var successCount = 0;
     var failureCount = 0;
     var errorUrls = [];
@@ -25,8 +24,7 @@ extend.migrator.register('csdn', function(args){
     var steps = [
         _fetchTotalPageCount,
         _gatherPostIds,
-        _fetchEachPostContent,
-        _savePostToHexo
+        _fetchPostThenSave
     ];
 
     async.series(steps, function(err){
@@ -43,6 +41,8 @@ extend.migrator.register('csdn', function(args){
     });
 
     function _fetchTotalPageCount(callback){
+
+        console.log("查询博客分页中...");
 
         var _url = 'http://blog.csdn.net/' + username;
 
@@ -66,6 +66,8 @@ extend.migrator.register('csdn', function(args){
     }
 
     function _gatherPostIds(callback){
+
+        console.log("查询博客总数...");
 
         async.times(pageCount, function(n, next){
 
@@ -94,7 +96,7 @@ extend.migrator.register('csdn', function(args){
         }, callback);
     }
 
-    function _fetchEachPostContent(callback){
+    function _fetchPostThenSave(callback){
 
         async.eachLimit(postIds, 5, function(postId, next){
 
@@ -111,40 +113,61 @@ extend.migrator.register('csdn', function(args){
                 }
 
                 try{
-
                     var html = response.body;
-
                     var $ = cheerio.load(html);
 
-                    var title = $("span.link_title > a").text().trim();
+                    var title = $("span.link_title > a").text().trim().replace("/", "-");
                     var date = $("span.link_postdate").text();
+                    var markdown = "";
 
-                    var article = $("div#article_content").html();
-                    var $$ = cheerio.load(article);
-                    $$("div").last().remove();// 移除最后一个div，是版权声明
-                    $$("br").remove();// 移除br，因为会影响pre解析
+                    _transferToMarkdown();
+                    _saveToHexo();
 
-                    var preConverter = {
-                        filter: 'pre',
-                        replacement: function(content) {
-                            return "```\n" + content + "\n```\n";
-                        }
-                    };
+                    function _transferToMarkdown(){
 
-                    var markdown = tomd($$.html(), {converters: [preConverter]});
+                        var article = $("div#article_content").html();
+                        var $$ = cheerio.load(article);
+                        $$("div").last().remove();// 移除最后一个div，是版权声明
+                        $$("br").remove();// 移除br，因为会影响pre解析
 
-                    var post = {
-                        title: title,
-                        date: date,
-                        content: markdown
-                    };
+                        var preConverter = {
+                            filter: 'pre',
+                            replacement: function(content) {
+                                return "```\n" + content + "\n```\n";
+                            }
+                        };
 
-                    successCount ++;
-                    postMetadatas.push(post);
-                    next(null);
+                        markdown = tomd($$.html(), {converters: [preConverter]});
+                    }
+
+                    function _saveToHexo(){
+
+                        var distDir = hexo.source_dir + "_posts/";
+
+                        var frontMatter = [
+                            'title: ' + title,
+                            'date: ' + date,
+                            'tags: ',
+                            '---'
+                        ];
+
+                        var fileContent = frontMatter.join('\n') + "\n" + markdown;
+
+                        fs.writeFile(distDir + title + '.md', fileContent, function(err){
+
+                            if(err){
+                                failureCount ++;
+                                errorUrls.push(detailUrl);
+                                next(null);
+                                return;
+                            }
+
+                            successCount ++;
+                            next(null);
+                        });
+                    }
 
                 }catch(err){
-
                     failureCount ++;
                     errorUrls.push(detailUrl);
                     next(null);
@@ -153,26 +176,4 @@ extend.migrator.register('csdn', function(args){
 
         }, callback);
     }
-
-    function _savePostToHexo(callback){
-
-        async.eachLimit(postMetadatas, 10, function(post, next){
-
-            var frontMatter = [
-                'title: ' + post.title,
-                'date: ' + post.date,
-                'tags: ',
-                '---'
-            ];
-
-            var fileContent = frontMatter.join('\n') + "\n" + post.content;
-
-            var distDir =  hexo.source_dir + "_posts/";
-
-            fs.writeFile(distDir + post.title + '.md', fileContent, next);
-
-        }, callback);
-    }
 });
-
-
